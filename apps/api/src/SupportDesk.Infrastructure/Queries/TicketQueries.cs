@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using SupportDesk.Application.Abstractions;
 using SupportDesk.Application.Contracts.Common;
@@ -27,27 +28,10 @@ public sealed class TicketQueries(SupportDbContext db, IClock clock) : ITicketQu
 
         var totalCount = await tickets.CountAsync(ct);
 
-        var now = clock.UtcNow;
-
         var items = await ApplySort(tickets, query)
             .Skip((query.Page - 1) * query.PageSize)
             .Take(query.PageSize)
-            .Select(x => new TicketListItemDto
-            {
-                Id = x.Ticket.Id,
-                Reference = x.Ticket.Reference,
-                Title = x.Ticket.Title,
-                Status = x.Ticket.Status,
-                Priority = x.Ticket.Priority,
-                Customer = new CustomerSummaryDto(x.Customer.Id, x.Customer.Name, x.Customer.Tier),
-                Category = new CategorySummaryDto(x.Category.Id, x.Category.Name),
-                AssignedAgent = x.Agent == null ? null : new AgentSummaryDto(x.Agent.Id, x.Agent.FullName),
-                CreatedAtUtc = x.Ticket.CreatedAtUtc,
-                UpdatedAtUtc = x.Ticket.UpdatedAtUtc,
-                DueAtUtc = x.Ticket.DueAtUtc,
-                ResolvedAtUtc = x.Ticket.ResolvedAtUtc,
-                SlaStatus = SlaEvaluator.Evaluate(x.Ticket.DueAtUtc, x.Ticket.ResolvedAtUtc, now)
-            })
+            .Select(ToListItem(clock.UtcNow))
             .ToListAsync(ct);
 
         return new PagedResult<TicketListItemDto>(items, query.Page, query.PageSize, totalCount);
@@ -80,32 +64,34 @@ public sealed class TicketQueries(SupportDbContext db, IClock clock) : ITicketQu
             .FirstOrDefaultAsync(ct);
     }
 
-    public async Task<IReadOnlyList<TicketListItemDto>> GetForCustomerAsync(int customerId, CancellationToken ct)
-    {
-        var now = clock.UtcNow;
-
-        return await TicketsWithLabels()
+    public async Task<IReadOnlyList<TicketListItemDto>> GetForCustomerAsync(int customerId, CancellationToken ct) =>
+        await TicketsWithLabels()
             .Where(x => x.Ticket.CustomerId == customerId)
             .OrderByDescending(x => x.Ticket.CreatedAtUtc)
             .ThenByDescending(x => x.Ticket.Id)
-            .Select(x => new TicketListItemDto
-            {
-                Id = x.Ticket.Id,
-                Reference = x.Ticket.Reference,
-                Title = x.Ticket.Title,
-                Status = x.Ticket.Status,
-                Priority = x.Ticket.Priority,
-                Customer = new CustomerSummaryDto(x.Customer.Id, x.Customer.Name, x.Customer.Tier),
-                Category = new CategorySummaryDto(x.Category.Id, x.Category.Name),
-                AssignedAgent = x.Agent == null ? null : new AgentSummaryDto(x.Agent.Id, x.Agent.FullName),
-                CreatedAtUtc = x.Ticket.CreatedAtUtc,
-                UpdatedAtUtc = x.Ticket.UpdatedAtUtc,
-                DueAtUtc = x.Ticket.DueAtUtc,
-                ResolvedAtUtc = x.Ticket.ResolvedAtUtc,
-                SlaStatus = SlaEvaluator.Evaluate(x.Ticket.DueAtUtc, x.Ticket.ResolvedAtUtc, now)
-            })
+            .Select(ToListItem(clock.UtcNow))
             .ToListAsync(ct);
-    }
+
+    /// <summary>
+    /// One list row, as every ticket list shows it. Only the columns the row needs are read.
+    /// </summary>
+    private static Expression<Func<TicketWithLabels, TicketListItemDto>> ToListItem(DateTime now) =>
+        x => new TicketListItemDto
+        {
+            Id = x.Ticket.Id,
+            Reference = x.Ticket.Reference,
+            Title = x.Ticket.Title,
+            Status = x.Ticket.Status,
+            Priority = x.Ticket.Priority,
+            Customer = new CustomerSummaryDto(x.Customer.Id, x.Customer.Name, x.Customer.Tier),
+            Category = new CategorySummaryDto(x.Category.Id, x.Category.Name),
+            AssignedAgent = x.Agent == null ? null : new AgentSummaryDto(x.Agent.Id, x.Agent.FullName),
+            CreatedAtUtc = x.Ticket.CreatedAtUtc,
+            UpdatedAtUtc = x.Ticket.UpdatedAtUtc,
+            DueAtUtc = x.Ticket.DueAtUtc,
+            ResolvedAtUtc = x.Ticket.ResolvedAtUtc,
+            SlaStatus = SlaEvaluator.Evaluate(x.Ticket.DueAtUtc, x.Ticket.ResolvedAtUtc, now)
+        };
 
     /// <summary>
     /// Every ticket with the rows that label it. Filter and sort this, then project.
