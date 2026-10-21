@@ -2,10 +2,14 @@ import { Link, useParams } from 'react-router-dom';
 import { ErrorMessage } from '../../components/ErrorMessage';
 import { Spinner } from '../../components/Spinner';
 import { useReferenceData } from '../../hooks/useReferenceData';
+import type { TicketEscalated } from '../../types/api';
 import { AssignAgentControl } from './components/AssignAgentControl';
+import { EscalationHistory } from './components/EscalationHistory';
+import { EscalationPanel } from './components/EscalationPanel';
 import { StatusActions } from './components/StatusActions';
 import { TicketSummary } from './components/TicketSummary';
 import { useTicket } from './hooks/useTicket';
+import { useTicketEscalations } from './hooks/useTicketEscalations';
 
 export function TicketDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -13,6 +17,19 @@ export function TicketDetailPage() {
 
   const { data: ticket, isLoading, error, reload, setData } = useTicket(ticketId);
   const reference = useReferenceData();
+  const history = useTicketEscalations(ticketId);
+
+  // The response already holds the escalated ticket; only the history needs a refetch.
+  const handleEscalated = (result: TicketEscalated) => {
+    setData(result.ticket);
+    void history.reload();
+  };
+
+  // Someone else changed the ticket first: show what it is now.
+  const handleConflict = () => {
+    void reload();
+    void history.reload();
+  };
 
   if (Number.isNaN(ticketId)) {
     return <ErrorMessage message="That is not a valid ticket reference." />;
@@ -51,6 +68,17 @@ export function TicketDetailPage() {
           </div>
 
           <StatusActions ticket={ticket} onUpdated={setData} />
+
+          {/* In the main column so the urgent action is on screen without scrolling, and
+              directly above the history it adds to. */}
+          <EscalationPanel ticket={ticket} onEscalated={handleEscalated} onConflict={handleConflict} />
+
+          <EscalationHistory
+            escalations={history.data}
+            isLoading={history.isLoading}
+            error={history.error}
+            onRetry={() => void history.reload()}
+          />
         </div>
 
         <aside className="detail-layout__side">

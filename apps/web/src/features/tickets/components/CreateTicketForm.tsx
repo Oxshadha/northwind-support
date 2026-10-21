@@ -6,7 +6,7 @@ import type {
   Category,
   CreateTicketPayload,
   CustomerListItem,
-  TicketDetail,
+  RaisedTicket,
   TicketPriority,
 } from '../../../types/api';
 
@@ -15,7 +15,7 @@ const priorities: TicketPriority[] = ['Low', 'Medium', 'High', 'Critical'];
 interface CreateTicketFormProps {
   customers: CustomerListItem[];
   categories: Category[];
-  onCreated: (ticket: TicketDetail) => void;
+  onCreated: (raised: RaisedTicket) => void;
 }
 
 interface FormState {

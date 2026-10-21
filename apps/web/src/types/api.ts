@@ -90,6 +90,7 @@ export interface TicketFilters {
   customerId?: number;
   assignedAgentId?: number;
   unassignedOnly?: boolean;
+  slaStatus?: SlaStatus;
   page: number;
   pageSize: number;
   sortBy: TicketSortField;
@@ -102,6 +103,44 @@ export interface CreateTicketPayload {
   customerId: number;
   categoryId: number;
   requestedPriority?: TicketPriority;
+}
+
+/** Why a new ticket got its priority, due date and owner. */
+export interface Triage {
+  priority: string;
+  slaWindow: string;
+  assignment: string;
+}
+
+/** Response of POST /tickets: the ticket as raised, and the triage decision behind it. */
+export interface RaisedTicket {
+  ticket: TicketDetail;
+  triage: Triage;
+}
+
+export interface EscalateTicketPayload {
+  reason: string;
+  escalatedBy: string;
+}
+
+/** One row of a ticket's escalation history. */
+export interface TicketEscalation {
+  id: number;
+  fromPriority: TicketPriority;
+  toPriority: TicketPriority;
+  fromAgent: AgentSummary | null;
+  toAgent: AgentSummary | null;
+  fromDueAtUtc: string | null;
+  toDueAtUtc: string | null;
+  reason: string;
+  escalatedBy: string;
+  escalatedAtUtc: string;
+}
+
+/** Response of POST /tickets/{id}/escalate. */
+export interface TicketEscalated {
+  ticket: TicketDetail;
+  escalation: TicketEscalation;
 }
 
 export interface Agent {
