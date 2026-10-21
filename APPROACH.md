@@ -17,6 +17,7 @@ For a quick overview, start with Sections 1 and 2. The remaining sections provid
 9. [Verification log](#9-verification-log)
 10. [Known limitations and future improvements](#10-known-limitations-and-future-improvements)
 11. [Commit map](#11-commit-map)
+12. [Time spent](#12-time-spent)
 
 ---
 
@@ -511,3 +512,30 @@ The assignment implementation meets the tested requirements, but several areas w
 | `b45a539` | Escalations record the actor's agent id (migration) |
 | `f847408` | SLA report lists idle agents and every priority, still one statement |
 | (this commit) | This file and the README |
+
+---
+
+## 12. Time spent
+
+Elapsed time between milestones, taken from my session log (when each phase started) and the
+commit timestamps (when it ended), with the overnight break left out. It is elapsed time, not
+pure effort: it includes my review of each step, waiting on builds and image downloads, and the
+environment problems below.
+
+| Phase | When | Elapsed | Notes |
+| --- | --- | ---: | --- |
+| Understanding the brief and the codebase, research, environment setup | Tue 20 Oct, 17:27 to 21:45 | 4 h | Requirement map, trap list, installing .NET 10, freeing disk space, restarting Docker |
+| Task 1: defect and filtering (incl. planning) | Wed 21 Oct, 01:49 to 02:20 and 07:55 to 08:11 | 0.75 h | Regression tests first; the fix was reviewed overnight and committed in the morning |
+| Task 2: escalation and assignment | 08:12 to 16:45 | 8.5 h | The largest task; includes SQL Server verification, the concurrency experiment, UI review, and time lost to a full disk and a hung Docker |
+| Task 3: authentication | 16:45 to 17:28 | 0.75 h | |
+| Task 4: Docker | 17:28 to 18:00 | 0.5 h | Includes a 13-minute first image build (base image downloads) |
+| Optional SLA summary report | 18:00 to 18:10 | 0.25 h | |
+| Clean-ups | 18:10 to 18:20 | 0.25 h | Security pins, the due-date sort, stale comments |
+| Documentation | 18:20 to 18:53 | 0.5 h | README and this file |
+| Closing the known gaps, updating the documents | 18:53 to 19:39 | 0.75 h | Revocation, the actor id, the report's empty groups |
+| Push, CI and submission | 19:39 onwards | 0.5 h | |
+| **Total** | | **about 17 h** | Within the two-day budget |
+
+The pace after Task 2 reflects working with an AI pair programmer (see the README's AI usage
+section): implementation was fast, so most of my time went into deciding, challenging,
+reviewing and verifying.
