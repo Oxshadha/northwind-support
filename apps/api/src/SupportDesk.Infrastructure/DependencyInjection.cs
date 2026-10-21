@@ -5,6 +5,7 @@ using Microsoft.Extensions.Options;
 using SupportDesk.Application.Abstractions;
 using SupportDesk.Domain.Aggregates.Tickets;
 using SupportDesk.Domain.Repositories;
+using SupportDesk.Infrastructure.Auth;
 using SupportDesk.Infrastructure.Configuration;
 using SupportDesk.Infrastructure.Data;
 using SupportDesk.Infrastructure.Queries;
@@ -43,6 +44,14 @@ public static class DependencyInjection
         services.AddSingleton(sp => sp.GetRequiredService<IOptions<SlaOptions>>().Value.ToPolicy());
 
         services.AddScoped<IAssignmentLock, SqlServerAssignmentLock>();
+
+        // Sign-in: the key is checked at start-up, like the SLA rules.
+        services.AddOptions<JwtOptions>()
+            .Bind(configuration.GetSection(JwtOptions.SectionName))
+            .ValidateOnStart();
+        services.AddSingleton<IValidateOptions<JwtOptions>, JwtOptionsValidator>();
+        services.AddSingleton<ITokenService, JwtTokenService>();
+        services.AddSingleton<IPasswordHasher, IdentityPasswordHasher>();
 
         services.AddScoped<ITicketRepository, TicketRepository>();
         services.AddScoped<IAgentRepository, AgentRepository>();

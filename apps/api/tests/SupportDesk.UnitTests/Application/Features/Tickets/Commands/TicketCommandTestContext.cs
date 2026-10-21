@@ -69,7 +69,7 @@ internal sealed class TicketCommandTestContext
 
         EscalateTicket = new EscalateTicketCommandHandler(
             Tickets.Object, Customers.Object, Categories.Object, Agents.Object, UnitOfWork.Object,
-            AssignmentLock, Sla, Clock, getTicket, TicketQueries.Object,
+            AssignmentLock, Sla, Clock, getTicket, TicketQueries.Object, CurrentUser,
             NullLogger<EscalateTicketCommandHandler>.Instance);
 
         ChangeTicketStatus = new ChangeTicketStatusCommandHandler(Tickets.Object, UnitOfWork.Object, Clock, getTicket);
@@ -96,6 +96,9 @@ internal sealed class TicketCommandTestContext
     public SlaPolicy Sla { get; } = Policies.DefaultSla();
 
     public FixedClock Clock { get; } = new();
+
+    /// <summary>Who the request's token says is signed in.</summary>
+    public FakeCurrentUser CurrentUser { get; } = new();
 
     public RaiseTicketCommandHandler RaiseTicket { get; }
 

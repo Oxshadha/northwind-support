@@ -29,6 +29,7 @@ public sealed class EscalateTicketCommandHandler(
     IClock clock,
     GetTicketQueryHandler getTicket,
     ITicketQueries ticketQueries,
+    ICurrentUser currentUser,
     ILogger<EscalateTicketCommandHandler> logger)
 {
     /// <exception cref="NotFoundException">No ticket has this id.</exception>
@@ -50,8 +51,9 @@ public sealed class EscalateTicketCommandHandler(
 
             var decision = AgentSelector.Reevaluate(ticket.AssignedAgentId, await agents.GetWorkloadsAsync(token), category);
 
+            // Who escalated is taken from the verified token, never from the request body.
             var escalation = ticket.Escalate(
-                request.Reason, request.EscalatedBy, sla, customer.Tier, decision.AgentId, clock.UtcNow);
+                request.Reason, currentUser.FullName, sla, customer.Tier, decision.AgentId, clock.UtcNow);
 
             await unitOfWork.SaveChangesAsync(token);
 
@@ -59,8 +61,8 @@ public sealed class EscalateTicketCommandHandler(
         }, ct);
 
         logger.LogInformation(
-            "Ticket {Reference} escalated by {EscalatedBy}. {Assignment}",
-            reference, request.EscalatedBy, assignment.Reason);
+            "Ticket {Reference} escalated by agent {AgentId}. {Assignment}",
+            reference, currentUser.AgentId, assignment.Reason);
 
         var history = await ticketQueries.GetEscalationsAsync(id, ct);
 

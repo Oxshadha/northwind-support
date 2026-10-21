@@ -33,7 +33,7 @@ public sealed class SeededDatabase : IAsyncDisposable
         var clock = new FixedClock();
         var db = new SupportDbContext(new DbContextOptionsBuilder<SupportDbContext>().UseSqlite(connection).Options);
         await db.Database.EnsureCreatedAsync();
-        await new SupportDbSeeder(db, clock, NullLogger<SupportDbSeeder>.Instance).SeedAsync();
+        await new SupportDbSeeder(db, clock, new FakePasswordHasher(), NullLogger<SupportDbSeeder>.Instance).SeedAsync();
 
         return new SeededDatabase(connection, db, clock);
     }

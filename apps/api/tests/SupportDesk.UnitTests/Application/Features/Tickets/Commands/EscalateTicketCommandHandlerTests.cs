@@ -10,7 +10,7 @@ namespace SupportDesk.UnitTests.Application.Features.Tickets.Commands;
 
 public class EscalateTicketCommandHandlerTests
 {
-    private static readonly EscalateTicketRequest Request = new("Customer has chased twice", "Team Lead");
+    private static readonly EscalateTicketRequest Request = new("Customer has chased twice");
 
     private static Ticket OpenTicket(TicketPriority priority, int? agentId)
     {
@@ -31,7 +31,8 @@ public class EscalateTicketCommandHandlerTests
         Assert.Equal(TicketPriority.High, ticket.Priority);
         Assert.Equal(context.Clock.UtcNow.AddHours(8), ticket.DueAtUtc);
         var escalation = Assert.Single(ticket.Escalations);
-        Assert.Equal("Team Lead", escalation.EscalatedBy);
+        // From the signed-in agent's token, not from anything in the request.
+        Assert.Equal("Sara Lindqvist", escalation.EscalatedBy);
         context.VerifySaved(Times.Once());
         Assert.Equal(1, context.AssignmentLock.Runs);
     }

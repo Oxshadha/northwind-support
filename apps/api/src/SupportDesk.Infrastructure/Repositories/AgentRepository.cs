@@ -15,6 +15,12 @@ public sealed class AgentRepository(SupportDbContext db) : IAgentRepository
             .FirstOrDefaultAsync(a => a.Id == id, ct);
 
     /// <remarks>
+    /// Email is unique and compared by the database collation, so case does not matter.
+    /// </remarks>
+    public Task<Agent?> GetByEmailAsync(string email, CancellationToken ct) =>
+        db.Set<Agent>().FirstOrDefaultAsync(a => a.Email == email, ct);
+
+    /// <remarks>
     /// One query for the whole team: open counts are a correlated count in SQL, not a query
     /// per agent. A support team is tens of agents, so the selection rules run in the domain
     /// over all of them rather than being duplicated as SQL filters.

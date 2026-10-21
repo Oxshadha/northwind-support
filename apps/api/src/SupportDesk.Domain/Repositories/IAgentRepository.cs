@@ -9,6 +9,9 @@ public interface IAgentRepository
 {
     Task<Agent?> GetByIdAsync(int id, CancellationToken ct);
 
+    /// <summary>The agent with this sign-in email, tracked so a rehashed password can be saved.</summary>
+    Task<Agent?> GetByEmailAsync(string email, CancellationToken ct);
+
     /// <summary>Every agent with their open-ticket count and specializations, in one read.</summary>
     Task<IReadOnlyList<AgentWorkload>> GetWorkloadsAsync(CancellationToken ct);
 }

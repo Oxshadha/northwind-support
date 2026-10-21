@@ -17,17 +17,58 @@ namespace SupportDesk.Infrastructure.Data;
 /// Every aggregate is built through its own behaviour, response clock included. The one
 /// historical value no behaviour produces - a ticket's last update - is set through EF Core.
 /// </remarks>
-public sealed class SupportDbSeeder(SupportDbContext db, IClock clock, ILogger<SupportDbSeeder> logger)
+public sealed class SupportDbSeeder(
+    SupportDbContext db,
+    IClock clock,
+    IPasswordHasher passwords,
+    ILogger<SupportDbSeeder> logger)
 {
-    /// <summary>Seeds the database, unless it already has tickets in it.</summary>
+    /// <summary>
+    /// The password every seeded agent signs in with. A local fixture for development only:
+    /// it is published in the README, and the seeder only ever runs in Development.
+    /// </summary>
+    public const string DevelopmentPassword = "LocalDev-Only-2026!";
+
+    /// <summary>
+    /// Seeds the demo data unless the database already has tickets, then makes sure every
+    /// agent has development credentials - including in a database seeded before sign-in existed.
+    /// </summary>
     public async Task SeedAsync(CancellationToken ct = default)
     {
         if (await db.Set<Ticket>().AnyAsync(ct))
         {
             logger.LogInformation("Seed data already present; skipping.");
+        }
+        else
+        {
+            await SeedDemoDataAsync(ct);
+        }
+
+        await SeedCredentialsAsync(ct);
+    }
+
+    private async Task SeedCredentialsAsync(CancellationToken ct)
+    {
+        var withoutCredentials = await db.Set<Agent>().Where(a => a.PasswordHash == null).ToListAsync(ct);
+
+        if (withoutCredentials.Count == 0)
+        {
             return;
         }
 
+        // Hashed here, at seed time, with each agent's own random salt: no hash is committed.
+        foreach (var agent in withoutCredentials)
+        {
+            agent.SetPasswordHash(passwords.Hash(DevelopmentPassword));
+        }
+
+        await db.SaveChangesAsync(ct);
+
+        logger.LogInformation("Issued development credentials to {Agents} agents.", withoutCredentials.Count);
+    }
+
+    private async Task SeedDemoDataAsync(CancellationToken ct)
+    {
         var now = clock.UtcNow;
 
         var categories = SeedCategories();
