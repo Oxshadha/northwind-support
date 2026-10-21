@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ApiError } from '../../../api/client';
 import { ticketsApi } from '../../../api/tickets';
+import { useDebouncedValue } from '../../../hooks/useDebouncedValue';
 import type { PagedResult, TicketFilters, TicketListItem } from '../../../types/api';
 
 const DEBOUNCE_MS = 300;
@@ -19,40 +20,74 @@ export const emptyFilters: TicketFilters = {
   sortDirection: 'desc',
 };
 
-interface State {
-  isLoading: boolean;
+interface Result {
+  /** The request this result answers, so a newer request shows as loading. */
+  requestKey: string;
   data?: PagedResult<TicketListItem>;
   error?: string;
 }
 
-/** Owns the ticket list's filters and the data they produce. */
+/**
+ * Owns the ticket list's filters and the data they produce.
+ *
+ * Only the search text is debounced, so typing sends one request once it settles; every other
+ * filter is applied immediately. The request is derived from the whole filter object, so a new
+ * filter needs no wiring here.
+ */
 export function useTicketList() {
   const [filters, setFilters] = useState<TicketFilters>(emptyFilters);
-  const [state, setState] = useState<State>({ isLoading: true });
+  const settledSearch = useDebouncedValue(filters.search, DEBOUNCE_MS);
+  const [reloadCount, setReloadCount] = useState(0);
+  const [result, setResult] = useState<Result>();
 
-  const load = async () => {
-    setState((current) => ({ ...current, isLoading: true, error: undefined }));
-
-    try {
-      const data = await ticketsApi.getTickets(filters);
-      setState({ isLoading: false, data, error: undefined });
-    } catch (error) {
-      const message = error instanceof ApiError ? error.message : 'Unable to load tickets.';
-      setState((current) => ({ ...current, isLoading: false, error: message }));
-    }
-  };
+  // Keyed by value, not identity: a keystroke creates a new filters object, but until the
+  // search settles the query it produces is the same, so no request is sent.
+  const queryKey = JSON.stringify({ ...filters, search: settledSearch });
+  const query = useMemo<TicketFilters>(() => JSON.parse(queryKey) as TicketFilters, [queryKey]);
+  const requestKey = `${queryKey}#${reloadCount}`;
 
   useEffect(() => {
-    const handle = window.setTimeout(load, DEBOUNCE_MS);
+    // A newer request (or leaving the page) cancels this one: the browser drops the HTTP call
+    // and the API's cancellation token stops the database query, so no stale result arrives.
+    const controller = new AbortController();
 
-    return () => window.clearTimeout(handle);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- filters object identity changes every render
-  }, [filters.search, filters.page, filters.pageSize]);
+    ticketsApi.getTickets(query, controller.signal).then(
+      (data) => {
+        // A response can land in the same tick as the abort; it is stale all the same.
+        if (!controller.signal.aborted) {
+          setResult({ requestKey, data });
+        }
+      },
+      (error: unknown) => {
+        if (controller.signal.aborted) {
+          return;
+        }
 
-  const updateFilters = (patch: Partial<TicketFilters>) =>
-    setFilters((current) => ({ ...current, ...patch, page: patch.page ?? 1 }));
+        const message = error instanceof ApiError ? error.message : 'Unable to load tickets.';
+        setResult((current) => ({ requestKey, data: current?.data, error: message }));
+      },
+    );
 
-  const resetFilters = () => setFilters(emptyFilters);
+    return () => controller.abort();
+  }, [query, requestKey]);
 
-  return { filters, updateFilters, resetFilters, reload: load, ...state };
+  const updateFilters = useCallback(
+    (patch: Partial<TicketFilters>) =>
+      setFilters((current) => ({ ...current, ...patch, page: patch.page ?? 1 })),
+    [],
+  );
+
+  const resetFilters = useCallback(() => setFilters(emptyFilters), []);
+
+  const reload = useCallback(() => setReloadCount((count) => count + 1), []);
+
+  return {
+    filters,
+    updateFilters,
+    resetFilters,
+    reload,
+    isLoading: result?.requestKey !== requestKey,
+    data: result?.data,
+    error: result?.requestKey === requestKey ? result.error : undefined,
+  };
 }
