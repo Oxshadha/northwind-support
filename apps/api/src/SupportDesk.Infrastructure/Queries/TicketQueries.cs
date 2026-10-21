@@ -159,40 +159,10 @@ public sealed class TicketQueries(SupportDbContext db, IClock clock, SlaPolicy s
                 x.Ticket.Title.Contains(search!) ||
                 x.Ticket.Reference.Contains(search!) ||
                 x.Customer.Name.Contains(search!))
-            .WhereIf(query.SlaStatus is not null, HasSlaStatus(query.SlaStatus.GetValueOrDefault(), now, atRiskThresholdPercent));
+            .WhereIf(query.SlaStatus is not null, SlaSql.On(
+                SlaSql.Is(query.SlaStatus.GetValueOrDefault(), now, atRiskThresholdPercent),
+                (TicketWithLabels x) => x.Ticket));
     }
-
-    /// <summary>
-    /// <see cref="SlaEvaluator.Evaluate"/> as a SQL predicate, so the database filters on a
-    /// status it never stores. The two must agree; a parity test over the seed data checks it.
-    /// </summary>
-    /// <remarks>
-    /// "At risk from" is the due time minus the threshold share of the window, which keeps the
-    /// arithmetic on one column (DATEADD) and leaves the comparison to "now" a plain parameter.
-    /// </remarks>
-    private static Expression<Func<TicketWithLabels, bool>> HasSlaStatus(SlaStatus status, DateTime now, int percent) =>
-        status switch
-        {
-            SlaStatus.NotApplicable => x => x.Ticket.DueAtUtc == null,
-
-            SlaStatus.Met => x => x.Ticket.ResolvedAtUtc != null && x.Ticket.ResolvedAtUtc <= x.Ticket.DueAtUtc,
-
-            SlaStatus.Breached => x =>
-                x.Ticket.DueAtUtc != null &&
-                (x.Ticket.ResolvedAtUtc != null ? x.Ticket.ResolvedAtUtc > x.Ticket.DueAtUtc : x.Ticket.DueAtUtc < now),
-
-            SlaStatus.AtRisk => x =>
-                x.Ticket.ResolvedAtUtc == null && x.Ticket.DueAtUtc >= now &&
-                x.Ticket.SlaWindowSeconds != null &&
-                x.Ticket.DueAtUtc!.Value.AddSeconds(-(x.Ticket.SlaWindowSeconds!.Value * percent / 100.0)) <= now,
-
-            SlaStatus.WithinSla => x =>
-                x.Ticket.ResolvedAtUtc == null && x.Ticket.DueAtUtc >= now &&
-                (x.Ticket.SlaWindowSeconds == null ||
-                 x.Ticket.DueAtUtc!.Value.AddSeconds(-(x.Ticket.SlaWindowSeconds!.Value * percent / 100.0)) > now),
-
-            _ => throw new ArgumentOutOfRangeException(nameof(status), status, "Unknown SLA status.")
-        };
 
     private static IQueryable<TicketWithLabels> ApplySort(IQueryable<TicketWithLabels> source, TicketQuery query)
     {
