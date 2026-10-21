@@ -163,6 +163,7 @@ public sealed class Ticket : AggregateRoot
     public TicketEscalation Escalate(
         string reason,
         string escalatedBy,
+        int escalatedByAgentId,
         SlaPolicy sla,
         CustomerTier customerTier,
         int? agentId,
@@ -170,6 +171,7 @@ public sealed class Ticket : AggregateRoot
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(reason);
         ArgumentException.ThrowIfNullOrWhiteSpace(escalatedBy);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(escalatedByAgentId);
         ArgumentNullException.ThrowIfNull(sla);
 
         EnsureCanBeEscalated();
@@ -189,6 +191,7 @@ public sealed class Ticket : AggregateRoot
             toDueAtUtc: DueAtUtc,
             reason: reason.Trim(),
             escalatedBy: escalatedBy.Trim(),
+            escalatedByAgentId: escalatedByAgentId,
             escalatedAtUtc: nowUtc);
 
         _escalations.Add(escalation);

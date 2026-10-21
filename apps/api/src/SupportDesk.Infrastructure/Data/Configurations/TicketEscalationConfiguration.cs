@@ -49,6 +49,11 @@ public sealed class TicketEscalationConfiguration : IEntityTypeConfiguration<Tic
             .HasForeignKey(e => e.ToAgentId)
             .OnDelete(DeleteBehavior.Restrict);
 
+        builder.HasOne<Agent>()
+            .WithMany()
+            .HasForeignKey(e => e.EscalatedByAgentId)
+            .OnDelete(DeleteBehavior.Restrict);
+
         // The only read is "this ticket's history, newest first": seek on the ticket, read the
         // rows already in order. It also serves the foreign key, so no separate TicketId index.
         builder.HasIndex(e => new { e.TicketId, e.EscalatedAtUtc })

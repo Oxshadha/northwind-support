@@ -211,14 +211,15 @@ public sealed class TicketQueriesTests : IAsyncLifetime
     {
         var ticket = await _db.Set<Ticket>().SingleAsync(t => t.Reference == "TCK-0002");
         var sla = Policies.DefaultSla();
-        ticket.Escalate("First chase from customer", "Team Lead", sla, CustomerTier.Standard, 1, _clock.UtcNow);
+        ticket.Escalate("First chase from customer", "Team Lead", 4, sla, CustomerTier.Standard, 1, _clock.UtcNow);
         _clock.Advance(TimeSpan.FromMinutes(10));
-        ticket.Escalate("Second chase, now urgent", "Duty Manager", sla, CustomerTier.Standard, 2, _clock.UtcNow);
+        ticket.Escalate("Second chase, now urgent", "Duty Manager", 5, sla, CustomerTier.Standard, 2, _clock.UtcNow);
         await _db.SaveChangesAsync();
 
         var history = await _queries.GetEscalationsAsync(ticket.Id, CancellationToken.None);
 
         Assert.Equal(["Duty Manager", "Team Lead"], history.Select(e => e.EscalatedBy));
+        Assert.Equal([5, 4], history.Select(e => e.EscalatedByAgentId));
         Assert.Equal(TicketPriority.High, history[0].FromPriority);
         Assert.Equal(TicketPriority.Critical, history[0].ToPriority);
         Assert.Equal("Alex Turner", history[0].FromAgent?.FullName);

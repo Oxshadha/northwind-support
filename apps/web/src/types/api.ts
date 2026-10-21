@@ -134,6 +134,8 @@ export interface TicketEscalation {
   toDueAtUtc: string | null;
   reason: string;
   escalatedBy: string;
+  /** Null only for escalations recorded before sign-in existed. */
+  escalatedByAgentId: number | null;
   escalatedAtUtc: string;
 }
 

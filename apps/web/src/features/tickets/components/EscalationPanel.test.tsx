@@ -100,6 +100,7 @@ describe('EscalationPanel', () => {
         toDueAtUtc: null,
         reason: 'Customer has chased twice',
         escalatedBy: 'Team Lead',
+        escalatedByAgentId: 4,
         escalatedAtUtc: '2026-09-25T10:03:00Z',
       },
     };

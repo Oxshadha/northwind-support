@@ -23,6 +23,8 @@ public sealed class TicketEscalationDto
 
     public string EscalatedBy { get; set; } = string.Empty;
 
+    public int? EscalatedByAgentId { get; set; }
+
     public DateTime EscalatedAtUtc { get; set; }
 }
 

@@ -26,6 +26,7 @@ public sealed class TicketEscalation : Entity
         DateTime? toDueAtUtc,
         string reason,
         string escalatedBy,
+        int escalatedByAgentId,
         DateTime escalatedAtUtc)
     {
         FromPriority = fromPriority;
@@ -36,6 +37,7 @@ public sealed class TicketEscalation : Entity
         ToDueAtUtc = toDueAtUtc;
         Reason = reason;
         EscalatedBy = escalatedBy;
+        EscalatedByAgentId = escalatedByAgentId;
         EscalatedAtUtc = escalatedAtUtc;
     }
 
@@ -55,7 +57,14 @@ public sealed class TicketEscalation : Entity
 
     public string Reason { get; private set; } = string.Empty;
 
+    /// <summary>The escalating agent's name as it was at the time, for a readable history.</summary>
     public string EscalatedBy { get; private set; } = string.Empty;
+
+    /// <summary>
+    /// Who escalated, exactly: names change and are not unique. Null only for rows written
+    /// before sign-in existed, when the actor was free text.
+    /// </summary>
+    public int? EscalatedByAgentId { get; private set; }
 
     public DateTime EscalatedAtUtc { get; private set; }
 }

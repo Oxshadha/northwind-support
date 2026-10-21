@@ -13,6 +13,7 @@ const escalation = (overrides: Partial<TicketEscalation> = {}): TicketEscalation
   toDueAtUtc: '2026-09-24T12:12:00Z',
   reason: 'Customer has chased twice',
   escalatedBy: 'Team Lead',
+  escalatedByAgentId: 4,
   escalatedAtUtc: '2026-09-24T04:12:00Z',
   ...overrides,
 });

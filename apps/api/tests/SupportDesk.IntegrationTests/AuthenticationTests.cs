@@ -180,6 +180,7 @@ public sealed class AuthenticationTests(ApiFactory factory) : IClassFixture<ApiF
 
         using var history = JsonDocument.Parse(await (await Send(HttpMethod.Get, "/api/tickets/3/escalations", token)).Content.ReadAsStringAsync());
         Assert.Equal("Sara Lindqvist", history.RootElement[0].GetProperty("escalatedBy").GetString());
+        Assert.Equal(4, history.RootElement[0].GetProperty("escalatedByAgentId").GetInt32());
     }
 
     private static string? Detail(string problemJson)

@@ -53,7 +53,7 @@ public sealed class EscalateTicketCommandHandler(
 
             // Who escalated is taken from the verified token, never from the request body.
             var escalation = ticket.Escalate(
-                request.Reason, currentUser.FullName, sla, customer.Tier, decision.AgentId, clock.UtcNow);
+                request.Reason, currentUser.FullName, currentUser.AgentId, sla, customer.Tier, decision.AgentId, clock.UtcNow);
 
             await unitOfWork.SaveChangesAsync(token);
 

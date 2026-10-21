@@ -25,7 +25,7 @@ public class TicketEscalationTests
     {
         var ticket = OpenTicket(from);
 
-        ticket.Escalate("Customer chased twice", "Team Lead", Sla, CustomerTier.Standard, 4, Later);
+        ticket.Escalate("Customer chased twice", "Team Lead", 9, Sla, CustomerTier.Standard, 4, Later);
 
         Assert.Equal(to, ticket.Priority);
     }
@@ -37,7 +37,7 @@ public class TicketEscalationTests
     {
         var ticket = OpenTicket(TicketPriority.Medium);
 
-        ticket.Escalate("Customer chased twice", "Team Lead", Sla, tier, 4, Later);
+        ticket.Escalate("Customer chased twice", "Team Lead", 9, Sla, tier, 4, Later);
 
         // Now High: due one High window after the escalation, not after creation.
         Assert.Equal(Later.AddHours(hours), ticket.DueAtUtc);
@@ -50,8 +50,8 @@ public class TicketEscalationTests
         var kept = OpenTicket(TicketPriority.Medium, agentId: 4);
         var changed = OpenTicket(TicketPriority.Medium, agentId: 4);
 
-        kept.Escalate("Customer chased twice", "Team Lead", Sla, CustomerTier.Standard, 4, Later);
-        changed.Escalate("Customer chased twice", "Team Lead", Sla, CustomerTier.Standard, 2, Later);
+        kept.Escalate("Customer chased twice", "Team Lead", 9, Sla, CustomerTier.Standard, 4, Later);
+        changed.Escalate("Customer chased twice", "Team Lead", 9, Sla, CustomerTier.Standard, 2, Later);
 
         Assert.Equal(4, kept.AssignedAgentId);
         Assert.Equal(2, changed.AssignedAgentId);
@@ -63,7 +63,7 @@ public class TicketEscalationTests
         var ticket = OpenTicket(TicketPriority.Medium, agentId: 4);
         var dueBefore = ticket.DueAtUtc;
 
-        var escalation = ticket.Escalate("  Customer chased twice  ", " Team Lead ", Sla, CustomerTier.Standard, 2, Later);
+        var escalation = ticket.Escalate("  Customer chased twice  ", " Team Lead ", 9, Sla, CustomerTier.Standard, 2, Later);
 
         Assert.Equal(TicketPriority.Medium, escalation.FromPriority);
         Assert.Equal(TicketPriority.High, escalation.ToPriority);
@@ -73,6 +73,7 @@ public class TicketEscalationTests
         Assert.Equal(Later.AddHours(8), escalation.ToDueAtUtc);
         Assert.Equal("Customer chased twice", escalation.Reason);
         Assert.Equal("Team Lead", escalation.EscalatedBy);
+        Assert.Equal(9, escalation.EscalatedByAgentId);
         Assert.Equal(Later, escalation.EscalatedAtUtc);
         Assert.Same(escalation, Assert.Single(ticket.Escalations));
         Assert.Equal(Later, ticket.UpdatedAtUtc);
@@ -84,7 +85,7 @@ public class TicketEscalationTests
         var ticket = OpenTicket(TicketPriority.Critical);
 
         var error = Assert.Throws<BusinessRuleViolationException>(() =>
-            ticket.Escalate("Customer chased twice", "Team Lead", Sla, CustomerTier.Standard, 2, Later));
+            ticket.Escalate("Customer chased twice", "Team Lead", 9, Sla, CustomerTier.Standard, 2, Later));
 
         Assert.Contains("already Critical", error.Message);
         Assert.Equal(TicketPriority.Critical, ticket.Priority);
@@ -100,7 +101,7 @@ public class TicketEscalationTests
         var ticket = new TicketBuilder().WithPriority(TicketPriority.Low).WithStatus(status).Build();
 
         var error = Assert.Throws<BusinessRuleViolationException>(() =>
-            ticket.Escalate("Customer chased twice", "Team Lead", Sla, CustomerTier.Standard, 2, Later));
+            ticket.Escalate("Customer chased twice", "Team Lead", 9, Sla, CustomerTier.Standard, 2, Later));
 
         Assert.Contains($"is {status}", error.Message);
         Assert.Equal(TicketPriority.Low, ticket.Priority);

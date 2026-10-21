@@ -33,6 +33,7 @@ public class EscalateTicketCommandHandlerTests
         var escalation = Assert.Single(ticket.Escalations);
         // From the signed-in agent's token, not from anything in the request.
         Assert.Equal("Sara Lindqvist", escalation.EscalatedBy);
+        Assert.Equal(4, escalation.EscalatedByAgentId);
         context.VerifySaved(Times.Once());
         Assert.Equal(1, context.AssignmentLock.Runs);
     }

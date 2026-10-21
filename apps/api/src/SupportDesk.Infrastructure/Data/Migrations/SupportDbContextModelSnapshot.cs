@@ -257,6 +257,9 @@ namespace SupportDesk.Infrastructure.Data.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
+                    b.Property<int?>("EscalatedByAgentId")
+                        .HasColumnType("int");
+
                     b.Property<int?>("FromAgentId")
                         .HasColumnType("int");
 
@@ -284,6 +287,8 @@ namespace SupportDesk.Infrastructure.Data.Migrations
                         .HasColumnType("int");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("EscalatedByAgentId");
 
                     b.HasIndex("FromAgentId");
 
@@ -340,6 +345,11 @@ namespace SupportDesk.Infrastructure.Data.Migrations
 
             modelBuilder.Entity("SupportDesk.Domain.Aggregates.Tickets.TicketEscalation", b =>
                 {
+                    b.HasOne("SupportDesk.Domain.Aggregates.Agents.Agent", null)
+                        .WithMany()
+                        .HasForeignKey("EscalatedByAgentId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("SupportDesk.Domain.Aggregates.Agents.Agent", null)
                         .WithMany()
                         .HasForeignKey("FromAgentId")

@@ -92,6 +92,7 @@ public sealed class TicketQueries(SupportDbContext db, IClock clock, SlaPolicy s
                 ToDueAtUtc = escalation.ToDueAtUtc,
                 Reason = escalation.Reason,
                 EscalatedBy = escalation.EscalatedBy,
+                EscalatedByAgentId = escalation.EscalatedByAgentId,
                 EscalatedAtUtc = escalation.EscalatedAtUtc
             })
             .ToListAsync(ct);
