@@ -89,13 +89,36 @@ public sealed class SlaSummaryReportTests : IAsyncLifetime
     }
 
     [SqlServerFact]
-    public async Task APeriodWithNoTickets_HasNoGroups()
+    public async Task APeriodWithNoTickets_ListsEveryActiveAgentWithZeros_InOneStatement()
     {
+        _commands.Reset();
         var groups = await new ReportQueries(_db, new SystemClock(), Sla).GetSlaSummaryAsync(
             new DateTime(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc), new DateTime(2000, 2, 1, 0, 0, 0, DateTimeKind.Utc),
             SlaSummaryGrouping.Agent, CancellationToken.None);
 
-        Assert.Empty(groups);
+        Assert.Equal(1, _commands.Count);
+
+        // The five active agents and "Unassigned"; inactive Yuki has no tickets here, so is left out.
+        Assert.Equal(
+            ["Alex Turner", "Ben Osei", "Marcus Doyle", "Priya Nair", "Sara Lindqvist", "Unassigned"],
+            groups.Select(g => g.Key));
+        Assert.All(groups, g =>
+        {
+            Assert.Equal(0, g.Total);
+            Assert.Null(g.BreachRatePercent);
+            Assert.Null(g.AverageResolutionHours);
+        });
+    }
+
+    [SqlServerFact]
+    public async Task APeriodWithNoTickets_ListsEveryPriorityWithZeros()
+    {
+        var groups = await new ReportQueries(_db, new SystemClock(), Sla).GetSlaSummaryAsync(
+            new DateTime(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc), new DateTime(2000, 2, 1, 0, 0, 0, DateTimeKind.Utc),
+            SlaSummaryGrouping.Priority, CancellationToken.None);
+
+        Assert.Equal(["Critical", "High", "Medium", "Low"], groups.Select(g => g.Key));
+        Assert.All(groups, g => Assert.Equal(0, g.Total));
     }
 
     /// <summary>The same report worked out in C# from the tickets themselves, with the domain rule.</summary>
@@ -121,9 +144,10 @@ public sealed class SlaSummaryReportTests : IAsyncLifetime
         Dictionary<string, (int Total, int Within, int AtRisk, int Breached, int Met, double? Hours)> expected,
         IReadOnlyList<SlaSummaryGroupDto> groups)
     {
-        Assert.Equal(expected.Keys.Order(), groups.Select(g => g.Key).Order());
+        // Every group with tickets matches the C# result; any other listed group is all zeros.
+        Assert.Equal(expected.Keys.Order(), groups.Where(g => g.Total > 0).Select(g => g.Key).Order());
 
-        foreach (var group in groups)
+        foreach (var group in groups.Where(g => g.Total > 0))
         {
             var want = expected[group.Key];
             Assert.Equal(want, (group.Total, group.WithinSla, group.AtRisk, group.Breached, group.Met, group.AverageResolutionHours));

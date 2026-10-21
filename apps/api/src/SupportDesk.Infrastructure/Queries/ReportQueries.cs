@@ -38,28 +38,98 @@ public sealed class ReportQueries(SupportDbContext db, IClock clock, SlaPolicy s
         };
     }
 
+    /// <remarks>
+    /// Every priority is listed, including those with no tickets in the period: a report that
+    /// silently drops a row reads as "no data" rather than "nothing went wrong".
+    /// </remarks>
     private static async Task<IReadOnlyList<SlaSummaryGroupDto>> ByPriorityAsync(IQueryable<SlaRow> rows, CancellationToken ct)
     {
-        var totals = await Totals(rows.GroupBy(r => r.Priority))
-            .OrderByDescending(t => t.Key)
-            .ToListAsync(ct);
+        var totals = await Totals(rows.GroupBy(r => r.Priority)).ToListAsync(ct);
 
-        return totals.Select(t => ToDto(t, t.Key.ToString(), agentId: null, priority: t.Key)).ToList();
+        // Filling the known priorities is not aggregation: the counting stays one SQL statement.
+        return Enum.GetValues<TicketPriority>()
+            .OrderDescending()
+            .Select(priority => totals.FirstOrDefault(t => t.Key == priority) is { } found
+                ? ToDto(found, priority.ToString(), agentId: null, priority)
+                : Empty(priority.ToString(), agentId: null, priority))
+            .ToList();
     }
 
+    /// <remarks>
+    /// Starts from the agents, so an active agent with no tickets in the period is listed with
+    /// zeros: exactly who a team lead looks for when rebalancing work. Inactive agents appear
+    /// only while they still have tickets in the period. Tickets nobody owns form an
+    /// "Unassigned" group, joined in the same statement with UNION ALL.
+    /// </remarks>
     private async Task<IReadOnlyList<SlaSummaryGroupDto>> ByAgentAsync(IQueryable<SlaRow> rows, CancellationToken ct)
     {
-        var totals = await (
-                from total in Totals(rows.GroupBy(r => r.AgentId))
-                from agent in db.Set<Agent>().Where(a => a.Id == total.Key).DefaultIfEmpty()
-                select new { Total = total, AgentName = agent == null ? null : agent.FullName })
-            .ToListAsync(ct);
+        var totals = Totals(rows.GroupBy(r => r.AgentId));
 
-        return totals
-            .Select(t => ToDto(t.Total, t.AgentName ?? "Unassigned", t.Total.Key, priority: null))
+        // A matched row's Key is the agent's id, so "Key is null" means no tickets: EF cannot
+        // test the joined row itself for null, but it can test a column (and COALESCE the counts).
+        var agents =
+            from agent in db.Set<Agent>()
+            join total in totals on (int?)agent.Id equals total.Key into matched
+            from total in matched.DefaultIfEmpty()
+            where agent.IsActive || total!.Key != null
+            select new AgentGroupRow
+            {
+                AgentId = agent.Id,
+                AgentName = agent.FullName,
+                Total = (int?)total!.Total ?? 0,
+                WithinSla = (int?)total!.WithinSla ?? 0,
+                AtRisk = (int?)total!.AtRisk ?? 0,
+                Breached = (int?)total!.Breached ?? 0,
+                Met = (int?)total!.Met ?? 0,
+                NoSla = (int?)total!.NoSla ?? 0,
+                AverageResolutionSeconds = total!.AverageResolutionSeconds
+            };
+
+        var unassigned =
+            from total in totals
+            where total.Key == null
+            select new AgentGroupRow
+            {
+                AgentId = null,
+                AgentName = null,
+                Total = total.Total,
+                WithinSla = total.WithinSla,
+                AtRisk = total.AtRisk,
+                Breached = total.Breached,
+                Met = total.Met,
+                NoSla = total.NoSla,
+                AverageResolutionSeconds = total.AverageResolutionSeconds
+            };
+
+        var groups = await agents.Concat(unassigned).ToListAsync(ct);
+
+        var dtos = groups
+            .Select(g => ToDto(
+                new GroupTotals<int?>
+                {
+                    Key = g.AgentId,
+                    Total = g.Total,
+                    WithinSla = g.WithinSla,
+                    AtRisk = g.AtRisk,
+                    Breached = g.Breached,
+                    Met = g.Met,
+                    NoSla = g.NoSla,
+                    AverageResolutionSeconds = g.AverageResolutionSeconds
+                },
+                g.AgentName ?? "Unassigned",
+                g.AgentId,
+                priority: null))
             .OrderBy(dto => dto.AgentId is null)
             .ThenBy(dto => dto.Key, StringComparer.Ordinal)
             .ToList();
+
+        // Like the priorities, "Unassigned" is always listed, with zeros when everything had an owner.
+        if (dtos.All(dto => dto.AgentId is not null))
+        {
+            dtos.Add(Empty("Unassigned", agentId: null, priority: null));
+        }
+
+        return dtos;
     }
 
     /// <summary>Per group: how many tickets, how many in each SLA state, and the mean resolution time.</summary>
@@ -117,6 +187,34 @@ public sealed class ReportQueries(SupportDbContext db, IClock clock, SlaPolicy s
             ? Math.Round(seconds / 3600, 1, MidpointRounding.AwayFromZero)
             : null
     };
+
+    private static SlaSummaryGroupDto Empty(string key, int? agentId, TicketPriority? priority) => new()
+    {
+        Key = key,
+        AgentId = agentId,
+        Priority = priority
+    };
+
+    private sealed class AgentGroupRow
+    {
+        public int? AgentId { get; init; }
+
+        public string? AgentName { get; init; }
+
+        public int Total { get; init; }
+
+        public int WithinSla { get; init; }
+
+        public int AtRisk { get; init; }
+
+        public int Breached { get; init; }
+
+        public int Met { get; init; }
+
+        public int NoSla { get; init; }
+
+        public double? AverageResolutionSeconds { get; init; }
+    }
 
     private sealed class SlaRow
     {
