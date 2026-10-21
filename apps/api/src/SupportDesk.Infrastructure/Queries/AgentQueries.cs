@@ -30,4 +30,8 @@ public sealed class AgentQueries(SupportDbContext db) : IAgentQueries
                  select new CategorySummaryDto(category.Id, category.Name))
                 .ToList()))
             .ToListAsync(ct);
+
+    /// <remarks>A primary-key seek reading one bit; cheap enough to run per request.</remarks>
+    public Task<bool> IsActiveAsync(int agentId, CancellationToken ct) =>
+        db.Set<Agent>().AsNoTracking().AnyAsync(a => a.Id == agentId && a.IsActive, ct);
 }

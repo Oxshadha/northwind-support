@@ -4,6 +4,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using SupportDesk.Infrastructure.Data;
 
@@ -136,6 +137,27 @@ public sealed class AuthenticationTests(ApiFactory factory) : IClassFixture<ApiF
         using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         Assert.Equal("Healthy", body.RootElement.GetProperty("status").GetString());
         Assert.Equal("Healthy", body.RootElement.GetProperty("checks").GetProperty("database").GetString());
+    }
+
+    [Fact]
+    public async Task ATokenStopsWorking_TheMomentItsAgentIsDeactivated()
+    {
+        // Ben is used only here: deactivating him must not affect the other tests.
+        var token = await TokenFor("ben.osei@northwind-support.example");
+        Assert.Equal(HttpStatusCode.OK, (await Send(HttpMethod.Get, "/api/tickets", token)).StatusCode);
+
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<SupportDbContext>();
+            var ben = await db.Set<Domain.Aggregates.Agents.Agent>().SingleAsync(a => a.Email == "ben.osei@northwind-support.example");
+            ben.Deactivate();
+            await db.SaveChangesAsync();
+        }
+
+        // The token is still signed and unexpired, but its agent may no longer use the API.
+        var afterDeactivation = await Send(HttpMethod.Get, "/api/tickets", token);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, afterDeactivation.StatusCode);
     }
 
     [Fact]

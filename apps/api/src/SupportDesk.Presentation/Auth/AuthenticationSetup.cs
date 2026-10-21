@@ -1,7 +1,9 @@
+using System.Globalization;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
+using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
 using SupportDesk.Application.Abstractions;
 using SupportDesk.Infrastructure.Auth;
@@ -38,9 +40,24 @@ public static class AuthenticationSetup
                     ClockSkew = TimeSpan.FromSeconds(30)
                 };
 
-                // Answer a missing or expired token with a problem document, like every other error.
                 bearer.Events = new JwtBearerEvents
                 {
+                    // A valid signature only proves who the agent was when they signed in. Check
+                    // they may still use the API, so deactivation takes effect at once rather
+                    // than when the token expires.
+                    OnTokenValidated = async context =>
+                    {
+                        var agents = context.HttpContext.RequestServices.GetRequiredService<IAgentQueries>();
+                        var subject = context.Principal?.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
+
+                        if (!int.TryParse(subject, NumberStyles.None, CultureInfo.InvariantCulture, out var agentId) ||
+                            !await agents.IsActiveAsync(agentId, context.HttpContext.RequestAborted))
+                        {
+                            context.Fail("The agent is no longer active.");
+                        }
+                    },
+
+                    // Answer a missing, expired or revoked token with a problem document, like every other error.
                     OnChallenge = async context =>
                     {
                         context.HandleResponse();
