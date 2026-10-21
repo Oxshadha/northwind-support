@@ -25,18 +25,41 @@ export class ApiError extends Error {
   }
 }
 
+interface AuthHooks {
+  /** The current access token, if anyone is signed in. */
+  getToken: () => string | undefined;
+  /** Called when the API rejects a token we sent: the session is over. */
+  onUnauthorized: () => void;
+}
+
+let auth: AuthHooks = { getToken: () => undefined, onUnauthorized: () => undefined };
+
+/** Connects the client to the session, so every call carries the token. */
+export function configureAuth(hooks: AuthHooks): void {
+  auth = hooks;
+}
+
 /**
- * The single place that talks to the API. Returns parsed JSON, or throws an
- * {@link ApiError} that callers can show to the user.
+ * The single place that talks to the API. Attaches the signed-in agent's token, returns
+ * parsed JSON, or throws an {@link ApiError} that callers can show to the user.
  */
 export async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = auth.getToken();
+
   const response = await fetch(`${baseUrl}${path}`, {
     ...init,
     headers: {
       'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(init?.headers ?? {}),
     },
   });
+
+  // A token we sent was refused (expired, or the agent deactivated): end the session. A 401
+  // without a token - a failed sign-in - is just an error for the caller to show.
+  if (response.status === 401 && token) {
+    auth.onUnauthorized();
+  }
 
   if (!response.ok) {
     const problem = await readProblem(response);

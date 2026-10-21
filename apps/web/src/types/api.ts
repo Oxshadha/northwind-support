@@ -118,9 +118,9 @@ export interface RaisedTicket {
   triage: Triage;
 }
 
+/** Who escalates comes from the signed-in agent's token, not from the form. */
 export interface EscalateTicketPayload {
   reason: string;
-  escalatedBy: string;
 }
 
 /** One row of a ticket's escalation history. */
@@ -179,6 +179,22 @@ export interface CustomerDetail {
   createdAtUtc: string;
   tickets: TicketListItem[];
 }
+
+/** The signed-in agent, enough to greet them. */
+export interface CurrentAgent {
+  id: number;
+  fullName: string;
+  email: string;
+}
+
+export interface LoginResponse {
+  token: string;
+  expiresAtUtc: string;
+  agent: CurrentAgent;
+}
+
+/** What the browser keeps between page loads while an agent is signed in. */
+export type Session = LoginResponse;
 
 /** RFC 7807 problem document, which is how the API reports every failure. */
 export interface ProblemDetails {

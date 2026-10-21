@@ -493,3 +493,21 @@ textarea[aria-invalid='true'] {
 .panel__intro {
   margin: 0 0 12px;
 }
+
+.app__user {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+  font-size: 0.9rem;
+}
+
+.login {
+  max-width: 420px;
+  margin: 64px auto;
+  padding: 0 var(--gap);
+}
+
+.login .card {
+  margin-top: var(--gap);
+}

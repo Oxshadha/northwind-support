@@ -4,7 +4,6 @@ import { ticketsApi } from '../../../api/tickets';
 import { Field } from '../../../components/Field';
 import type { EscalateTicketPayload, TicketDetail, TicketEscalated } from '../../../types/api';
 import {
-  ESCALATED_BY_MAX_LENGTH,
   REASON_MAX_LENGTH,
   escalationBlocker,
   validateEscalation,
@@ -18,7 +17,7 @@ interface EscalationPanelProps {
   onConflict?: () => void;
 }
 
-const emptyForm: EscalateTicketPayload = { reason: '', escalatedBy: '' };
+const emptyForm: EscalateTicketPayload = { reason: '' };
 
 /** Raises a ticket's priority one level, with a reason, and reports what the API decided. */
 export function EscalationPanel({ ticket, onEscalated, onConflict }: EscalationPanelProps) {
@@ -43,10 +42,8 @@ export function EscalationPanel({ ticket, onEscalated, onConflict }: EscalationP
     setIsSaving(true);
 
     try {
-      const result = await ticketsApi.escalate(ticket.id, {
-        reason: form.reason.trim(),
-        escalatedBy: form.escalatedBy.trim(),
-      });
+      // Who escalates is the signed-in agent; the API reads that from the token.
+      const result = await ticketsApi.escalate(ticket.id, { reason: form.reason.trim() });
       setForm(emptyForm);
       onEscalated(result);
     } catch (caught) {
@@ -98,21 +95,6 @@ export function EscalationPanel({ ticket, onEscalated, onConflict }: EscalationP
             )}
           </Field>
 
-          <Field id="escalation-by" label="Escalated by" error={errors.escalatedBy}>
-            {(fieldProps) => (
-              <input
-                {...fieldProps}
-                type="text"
-                autoComplete="name"
-                value={form.escalatedBy}
-                maxLength={ESCALATED_BY_MAX_LENGTH}
-                onChange={(event) =>
-                  setForm((current) => ({ ...current, escalatedBy: event.target.value }))
-                }
-              />
-            )}
-          </Field>
-
           <button type="submit" className="button button--primary" disabled={isSaving}>
             {isSaving ? 'Escalating...' : 'Escalate ticket'}
           </button>
@@ -129,8 +111,8 @@ function fromApiErrors(fieldErrors: Record<string, string[]>): EscalationErrors 
   for (const [field, messages] of Object.entries(fieldErrors)) {
     const key = field.charAt(0).toLowerCase() + field.slice(1);
 
-    if (key === 'reason' || key === 'escalatedBy') {
-      errors[key] = messages[0];
+    if (key === 'reason') {
+      errors.reason = messages[0];
     }
   }
 

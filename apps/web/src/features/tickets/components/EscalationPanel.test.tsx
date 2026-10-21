@@ -24,7 +24,6 @@ describe('EscalationPanel', () => {
     render(<EscalationPanel ticket={ticketDetail()} onEscalated={onEscalated} />);
 
     await userEvent.type(screen.getByLabelText('Reason'), 'abc ');
-    await userEvent.type(screen.getByLabelText('Escalated by'), 'Team Lead');
     await userEvent.click(screen.getByRole('button', { name: 'Escalate ticket' }));
 
     expect(screen.getByText('Give a reason of 5 to 500 characters.')).toBeInTheDocument();
@@ -42,16 +41,13 @@ describe('EscalationPanel', () => {
     render(<EscalationPanel ticket={ticketDetail()} onEscalated={onEscalated} onConflict={onConflict} />);
 
     await userEvent.type(screen.getByLabelText('Reason'), 'Customer has chased twice');
-    await userEvent.type(screen.getByLabelText('Escalated by'), 'Team Lead');
     await userEvent.click(screen.getByRole('button', { name: 'Escalate ticket' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('already Critical');
     // The page is asked to refetch the now-changed ticket; it is not given a changed one.
     expect(onConflict).toHaveBeenCalledOnce();
-    expect(escalate).toHaveBeenCalledWith(12, {
-      reason: 'Customer has chased twice',
-      escalatedBy: 'Team Lead',
-    });
+    // Only the reason is sent: who escalates comes from the signed-in agent's token.
+    expect(escalate).toHaveBeenCalledWith(12, { reason: 'Customer has chased twice' });
     expect(onEscalated).not.toHaveBeenCalled();
     // The form keeps what was typed, so the user can act on the message.
     expect(screen.getByLabelText('Reason')).toHaveValue('Customer has chased twice');
@@ -64,7 +60,6 @@ describe('EscalationPanel', () => {
     const { rerender } = render(<EscalationPanel ticket={ticketDetail()} onEscalated={vi.fn()} />);
 
     await userEvent.type(screen.getByLabelText('Reason'), 'Customer has chased twice');
-    await userEvent.type(screen.getByLabelText('Escalated by'), 'Team Lead');
     await userEvent.click(screen.getByRole('button', { name: 'Escalate ticket' }));
     await screen.findByRole('alert');
 
@@ -86,7 +81,6 @@ describe('EscalationPanel', () => {
     render(<EscalationPanel ticket={ticketDetail()} onEscalated={vi.fn()} onConflict={onConflict} />);
 
     await userEvent.type(screen.getByLabelText('Reason'), 'Customer has chased twice');
-    await userEvent.type(screen.getByLabelText('Escalated by'), 'Team Lead');
     await userEvent.click(screen.getByRole('button', { name: 'Escalate ticket' }));
 
     expect(await screen.findByText('Reason must be between 5 and 500 characters.')).toBeInTheDocument();
@@ -114,7 +108,6 @@ describe('EscalationPanel', () => {
     render(<EscalationPanel ticket={ticketDetail()} onEscalated={onEscalated} />);
 
     await userEvent.type(screen.getByLabelText('Reason'), 'Customer has chased twice');
-    await userEvent.type(screen.getByLabelText('Escalated by'), 'Team Lead');
     await userEvent.click(screen.getByRole('button', { name: 'Escalate ticket' }));
 
     expect(onEscalated).toHaveBeenCalledWith(result);

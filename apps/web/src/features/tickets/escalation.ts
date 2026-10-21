@@ -3,7 +3,6 @@ import type { EscalateTicketPayload, TicketDetail } from '../../types/api';
 /** The same limits the API enforces (TicketEscalation in the domain). */
 export const REASON_MIN_LENGTH = 5;
 export const REASON_MAX_LENGTH = 500;
-export const ESCALATED_BY_MAX_LENGTH = 100;
 
 export type EscalationErrors = Partial<Record<keyof EscalateTicketPayload, string>>;
 
@@ -14,12 +13,6 @@ export function validateEscalation(form: EscalateTicketPayload): EscalationError
 
   if (reason.length < REASON_MIN_LENGTH || reason.length > REASON_MAX_LENGTH) {
     errors.reason = `Give a reason of ${REASON_MIN_LENGTH} to ${REASON_MAX_LENGTH} characters.`;
-  }
-
-  if (form.escalatedBy.trim() === '') {
-    errors.escalatedBy = 'Say who is escalating.';
-  } else if (form.escalatedBy.trim().length > ESCALATED_BY_MAX_LENGTH) {
-    errors.escalatedBy = `Use at most ${ESCALATED_BY_MAX_LENGTH} characters.`;
   }
 
   return errors;
