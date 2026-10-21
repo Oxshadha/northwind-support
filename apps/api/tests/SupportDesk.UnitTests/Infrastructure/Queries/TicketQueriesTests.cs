@@ -153,6 +153,19 @@ public sealed class TicketQueriesTests : IAsyncLifetime
         Assert.Equal(4, result.Items.Count);
     }
 
+    [Fact]
+    public async Task DueSoonest_PutsTicketsWithoutADueDateLast_NotFirst()
+    {
+        // No SLA: nothing is due, so it is the least urgent, not the most.
+        _db.Add(Ticket.Raise("TCK-0041", "No SLA applies", "Raised before SLAs existed.", 1, 1, TicketPriority.Low, _clock.UtcNow));
+        await _db.SaveChangesAsync();
+
+        var result = await Search(new TicketQuery { SortBy = "dueAtUtc", SortDirection = "asc", PageSize = 100 });
+
+        Assert.Equal("TCK-0041", result.Items[^1].Reference);
+        Assert.Equal(result.Items.Take(40).OrderBy(t => t.DueAtUtc).Select(t => t.Reference), result.Items.Take(40).Select(t => t.Reference));
+    }
+
     [Theory]
     [InlineData(SlaStatus.WithinSla)]
     [InlineData(SlaStatus.AtRisk)]

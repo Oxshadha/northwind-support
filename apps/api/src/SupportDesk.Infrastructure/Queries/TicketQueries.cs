@@ -173,9 +173,11 @@ public sealed class TicketQueries(SupportDbContext db, IClock clock, SlaPolicy s
             "updatedatutc" => descending
                 ? source.OrderByDescending(x => x.Ticket.UpdatedAtUtc)
                 : source.OrderBy(x => x.Ticket.UpdatedAtUtc),
+            // SQL Server sorts NULL first; a ticket with no due date is the least urgent, so it
+            // goes last whichever way the dates run.
             "dueatutc" => descending
-                ? source.OrderByDescending(x => x.Ticket.DueAtUtc)
-                : source.OrderBy(x => x.Ticket.DueAtUtc),
+                ? source.OrderBy(x => x.Ticket.DueAtUtc == null).ThenByDescending(x => x.Ticket.DueAtUtc)
+                : source.OrderBy(x => x.Ticket.DueAtUtc == null).ThenBy(x => x.Ticket.DueAtUtc),
             "priority" => descending
                 ? source.OrderByDescending(x => x.Ticket.Priority)
                 : source.OrderBy(x => x.Ticket.Priority),
