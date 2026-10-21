@@ -15,7 +15,7 @@ namespace SupportDesk.Infrastructure.Queries;
 /// Ticket reads. Projected in the database and never tracked. Aggregates hold only each
 /// other's ids, so the customer, category and agent labels are joined in here, on the read side.
 /// </summary>
-public sealed class TicketQueries(SupportDbContext db, IClock clock) : ITicketQueries
+public sealed class TicketQueries(SupportDbContext db, IClock clock, SlaPolicy sla) : ITicketQueries
 {
     /// <remarks>
     /// Filters, counts, sorts and pages in that order, all in one database round trip each for
@@ -23,14 +23,15 @@ public sealed class TicketQueries(SupportDbContext db, IClock clock) : ITicketQu
     /// </remarks>
     public async Task<PagedResult<TicketListItemDto>> GetPagedAsync(TicketQuery query, CancellationToken ct)
     {
-        var tickets = ApplyFilters(TicketsWithLabels(), query);
+        var now = clock.UtcNow;
+        var tickets = ApplyFilters(TicketsWithLabels(), query, now, sla.AtRiskThresholdPercent);
 
         var totalCount = await tickets.CountAsync(ct);
 
         var items = await ApplySort(tickets, query)
             .Skip((query.Page - 1) * query.PageSize)
             .Take(query.PageSize)
-            .Select(ToListItem(clock.UtcNow))
+            .Select(ToListItem(now, sla.AtRiskThresholdPercent))
             .ToListAsync(ct);
 
         return new PagedResult<TicketListItemDto>(items, query.Page, query.PageSize, totalCount);
@@ -39,6 +40,7 @@ public sealed class TicketQueries(SupportDbContext db, IClock clock) : ITicketQu
     public Task<TicketDetailDto?> GetDetailAsync(int id, CancellationToken ct)
     {
         var now = clock.UtcNow;
+        var threshold = sla.AtRiskThresholdPercent;
 
         return TicketsWithLabels()
             .Where(x => x.Ticket.Id == id)
@@ -58,7 +60,8 @@ public sealed class TicketQueries(SupportDbContext db, IClock clock) : ITicketQu
                 UpdatedAtUtc = x.Ticket.UpdatedAtUtc,
                 DueAtUtc = x.Ticket.DueAtUtc,
                 ResolvedAtUtc = x.Ticket.ResolvedAtUtc,
-                SlaStatus = SlaEvaluator.Evaluate(x.Ticket.DueAtUtc, x.Ticket.ResolvedAtUtc, now)
+                SlaStatus = SlaEvaluator.Evaluate(
+                    x.Ticket.DueAtUtc, x.Ticket.ResolvedAtUtc, x.Ticket.SlaWindowSeconds, threshold, now)
             })
             .FirstOrDefaultAsync(ct);
     }
@@ -68,13 +71,38 @@ public sealed class TicketQueries(SupportDbContext db, IClock clock) : ITicketQu
             .Where(x => x.Ticket.CustomerId == customerId)
             .OrderByDescending(x => x.Ticket.CreatedAtUtc)
             .ThenByDescending(x => x.Ticket.Id)
-            .Select(ToListItem(clock.UtcNow))
+            .Select(ToListItem(clock.UtcNow, sla.AtRiskThresholdPercent))
             .ToListAsync(ct);
+
+    public async Task<IReadOnlyList<TicketEscalationDto>> GetEscalationsAsync(int ticketId, CancellationToken ct) =>
+        await (
+            from escalation in db.Set<TicketEscalation>().AsNoTracking()
+            where escalation.TicketId == ticketId
+            from fromAgent in db.Set<Agent>().Where(a => a.Id == escalation.FromAgentId).DefaultIfEmpty()
+            from toAgent in db.Set<Agent>().Where(a => a.Id == escalation.ToAgentId).DefaultIfEmpty()
+            orderby escalation.EscalatedAtUtc descending, escalation.Id descending
+            select new TicketEscalationDto
+            {
+                Id = escalation.Id,
+                FromPriority = escalation.FromPriority,
+                ToPriority = escalation.ToPriority,
+                FromAgent = fromAgent == null ? null : new AgentSummaryDto(fromAgent.Id, fromAgent.FullName),
+                ToAgent = toAgent == null ? null : new AgentSummaryDto(toAgent.Id, toAgent.FullName),
+                FromDueAtUtc = escalation.FromDueAtUtc,
+                ToDueAtUtc = escalation.ToDueAtUtc,
+                Reason = escalation.Reason,
+                EscalatedBy = escalation.EscalatedBy,
+                EscalatedAtUtc = escalation.EscalatedAtUtc
+            })
+            .ToListAsync(ct);
+
+    public Task<bool> ExistsAsync(int id, CancellationToken ct) =>
+        db.Set<Ticket>().AsNoTracking().AnyAsync(t => t.Id == id, ct);
 
     /// <summary>
     /// One list row, as every ticket list shows it. Only the columns the row needs are read.
     /// </summary>
-    private static Expression<Func<TicketWithLabels, TicketListItemDto>> ToListItem(DateTime now) =>
+    private static Expression<Func<TicketWithLabels, TicketListItemDto>> ToListItem(DateTime now, int atRiskThresholdPercent) =>
         x => new TicketListItemDto
         {
             Id = x.Ticket.Id,
@@ -89,7 +117,8 @@ public sealed class TicketQueries(SupportDbContext db, IClock clock) : ITicketQu
             UpdatedAtUtc = x.Ticket.UpdatedAtUtc,
             DueAtUtc = x.Ticket.DueAtUtc,
             ResolvedAtUtc = x.Ticket.ResolvedAtUtc,
-            SlaStatus = SlaEvaluator.Evaluate(x.Ticket.DueAtUtc, x.Ticket.ResolvedAtUtc, now)
+            SlaStatus = SlaEvaluator.Evaluate(
+                x.Ticket.DueAtUtc, x.Ticket.ResolvedAtUtc, x.Ticket.SlaWindowSeconds, atRiskThresholdPercent, now)
         };
 
     /// <summary>
@@ -111,7 +140,11 @@ public sealed class TicketQueries(SupportDbContext db, IClock clock) : ITicketQu
     /// <c>%</c> or <c>_</c> in the text escaped; case-insensitivity comes from the database
     /// collation.
     /// </remarks>
-    private static IQueryable<TicketWithLabels> ApplyFilters(IQueryable<TicketWithLabels> source, TicketQuery query)
+    private static IQueryable<TicketWithLabels> ApplyFilters(
+        IQueryable<TicketWithLabels> source,
+        TicketQuery query,
+        DateTime now,
+        int atRiskThresholdPercent)
     {
         var search = query.Search?.Trim();
 
@@ -125,8 +158,41 @@ public sealed class TicketQueries(SupportDbContext db, IClock clock) : ITicketQu
             .WhereIf(!string.IsNullOrEmpty(search), x =>
                 x.Ticket.Title.Contains(search!) ||
                 x.Ticket.Reference.Contains(search!) ||
-                x.Customer.Name.Contains(search!));
+                x.Customer.Name.Contains(search!))
+            .WhereIf(query.SlaStatus is not null, HasSlaStatus(query.SlaStatus.GetValueOrDefault(), now, atRiskThresholdPercent));
     }
+
+    /// <summary>
+    /// <see cref="SlaEvaluator.Evaluate"/> as a SQL predicate, so the database filters on a
+    /// status it never stores. The two must agree; a parity test over the seed data checks it.
+    /// </summary>
+    /// <remarks>
+    /// "At risk from" is the due time minus the threshold share of the window, which keeps the
+    /// arithmetic on one column (DATEADD) and leaves the comparison to "now" a plain parameter.
+    /// </remarks>
+    private static Expression<Func<TicketWithLabels, bool>> HasSlaStatus(SlaStatus status, DateTime now, int percent) =>
+        status switch
+        {
+            SlaStatus.NotApplicable => x => x.Ticket.DueAtUtc == null,
+
+            SlaStatus.Met => x => x.Ticket.ResolvedAtUtc != null && x.Ticket.ResolvedAtUtc <= x.Ticket.DueAtUtc,
+
+            SlaStatus.Breached => x =>
+                x.Ticket.DueAtUtc != null &&
+                (x.Ticket.ResolvedAtUtc != null ? x.Ticket.ResolvedAtUtc > x.Ticket.DueAtUtc : x.Ticket.DueAtUtc < now),
+
+            SlaStatus.AtRisk => x =>
+                x.Ticket.ResolvedAtUtc == null && x.Ticket.DueAtUtc >= now &&
+                x.Ticket.SlaWindowSeconds != null &&
+                x.Ticket.DueAtUtc!.Value.AddSeconds(-(x.Ticket.SlaWindowSeconds!.Value * percent / 100.0)) <= now,
+
+            SlaStatus.WithinSla => x =>
+                x.Ticket.ResolvedAtUtc == null && x.Ticket.DueAtUtc >= now &&
+                (x.Ticket.SlaWindowSeconds == null ||
+                 x.Ticket.DueAtUtc!.Value.AddSeconds(-(x.Ticket.SlaWindowSeconds!.Value * percent / 100.0)) > now),
+
+            _ => throw new ArgumentOutOfRangeException(nameof(status), status, "Unknown SLA status.")
+        };
 
     private static IQueryable<TicketWithLabels> ApplySort(IQueryable<TicketWithLabels> source, TicketQuery query)
     {

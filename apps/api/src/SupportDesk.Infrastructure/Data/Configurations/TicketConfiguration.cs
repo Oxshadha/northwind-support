@@ -19,6 +19,7 @@ public sealed class TicketConfiguration : IEntityTypeConfiguration<Ticket>
         {
             t.HasCheckConstraint("CK_Tickets_Priority", "[Priority] BETWEEN 1 AND 4");
             t.HasCheckConstraint("CK_Tickets_Status", "[Status] BETWEEN 1 AND 5");
+            t.HasCheckConstraint("CK_Tickets_SlaWindowSeconds", "[SlaWindowSeconds] > 0");
         });
 
         builder.HasKey(t => t.Id);
@@ -40,6 +41,15 @@ public sealed class TicketConfiguration : IEntityTypeConfiguration<Ticket>
         builder.Property(t => t.DueAtUtc).HasColumnType("datetime2(3)");
 
         builder.Property(t => t.ResolvedAtUtc).HasColumnType("datetime2(3)");
+
+        // Escalation history belongs to the ticket. Restrict, not cascade: an audit record must
+        // never disappear as a side effect of deleting something else.
+        builder.HasMany(t => t.Escalations)
+            .WithOne()
+            .HasForeignKey(e => e.TicketId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.Navigation(t => t.Escalations).UsePropertyAccessMode(PropertyAccessMode.Field);
 
         // A ticket is never silently detached from the rows that give it meaning.
         builder.HasOne<Customer>()

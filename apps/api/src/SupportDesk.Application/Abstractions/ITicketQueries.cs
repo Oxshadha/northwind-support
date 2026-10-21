@@ -14,6 +14,11 @@ public interface ITicketQueries
 
     Task<TicketDetailDto?> GetDetailAsync(int id, CancellationToken ct);
 
+    /// <summary>A ticket's escalation history, newest first.</summary>
+    Task<IReadOnlyList<TicketEscalationDto>> GetEscalationsAsync(int ticketId, CancellationToken ct);
+
+    Task<bool> ExistsAsync(int id, CancellationToken ct);
+
     /// <summary>A customer's tickets, newest first.</summary>
     Task<IReadOnlyList<TicketListItemDto>> GetForCustomerAsync(int customerId, CancellationToken ct);
 }

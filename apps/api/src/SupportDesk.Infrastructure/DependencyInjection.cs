@@ -1,8 +1,11 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using SupportDesk.Application.Abstractions;
+using SupportDesk.Domain.Aggregates.Tickets;
 using SupportDesk.Domain.Repositories;
+using SupportDesk.Infrastructure.Configuration;
 using SupportDesk.Infrastructure.Data;
 using SupportDesk.Infrastructure.Queries;
 using SupportDesk.Infrastructure.Repositories;
@@ -30,6 +33,16 @@ public static class DependencyInjection
         services.AddScoped<IUnitOfWork>(sp => sp.GetRequiredService<SupportDbContext>());
 
         services.AddSingleton<IClock, SystemClock>();
+
+        // The SLA rules come from configuration and are checked at start-up, so a bad value
+        // stops the API from starting instead of failing the first ticket raised.
+        services.AddOptions<SlaOptions>()
+            .Bind(configuration.GetSection(SlaOptions.SectionName))
+            .ValidateOnStart();
+        services.AddSingleton<IValidateOptions<SlaOptions>, SlaOptionsValidator>();
+        services.AddSingleton(sp => sp.GetRequiredService<IOptions<SlaOptions>>().Value.ToPolicy());
+
+        services.AddScoped<IAssignmentLock, SqlServerAssignmentLock>();
 
         services.AddScoped<ITicketRepository, TicketRepository>();
         services.AddScoped<IAgentRepository, AgentRepository>();

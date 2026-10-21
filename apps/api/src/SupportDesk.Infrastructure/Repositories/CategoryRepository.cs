@@ -7,6 +7,7 @@ namespace SupportDesk.Infrastructure.Repositories;
 
 public sealed class CategoryRepository(SupportDbContext db) : ICategoryRepository
 {
-    public Task<bool> ExistsAsync(int id, CancellationToken ct) =>
-        db.Set<Category>().AsNoTracking().AnyAsync(c => c.Id == id, ct);
+    /// <summary>Read only: categories are reference data, never changed by a ticket command.</summary>
+    public Task<Category?> GetByIdAsync(int id, CancellationToken ct) =>
+        db.Set<Category>().AsNoTracking().FirstOrDefaultAsync(c => c.Id == id, ct);
 }

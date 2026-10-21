@@ -1,8 +1,7 @@
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging.Abstractions;
 using SupportDesk.Application.Contracts.Common;
 using SupportDesk.Application.Contracts.Tickets;
+using SupportDesk.Domain.Aggregates.Customers;
 using SupportDesk.Domain.Aggregates.Tickets;
 using SupportDesk.Infrastructure.Data;
 using SupportDesk.Infrastructure.Queries;
@@ -16,28 +15,20 @@ namespace SupportDesk.UnitTests.Infrastructure.Queries;
 /// </summary>
 public sealed class TicketQueriesTests : IAsyncLifetime
 {
-    private readonly SqliteConnection _connection = new("DataSource=:memory:");
-    private readonly FixedClock _clock = new();
-    private SupportDbContext _db = null!;
+    private SeededDatabase _database = null!;
     private TicketQueries _queries = null!;
+
+    private SupportDbContext _db => _database.Db;
+
+    private FixedClock _clock => _database.Clock;
 
     public async Task InitializeAsync()
     {
-        // The in-memory database lives as long as this open connection.
-        await _connection.OpenAsync();
-
-        _db = new SupportDbContext(new DbContextOptionsBuilder<SupportDbContext>().UseSqlite(_connection).Options);
-        await _db.Database.EnsureCreatedAsync();
-        await new SupportDbSeeder(_db, _clock, NullLogger<SupportDbSeeder>.Instance).SeedAsync();
-
-        _queries = new TicketQueries(_db, _clock);
+        _database = await SeededDatabase.CreateAsync();
+        _queries = new TicketQueries(_db, _clock, Policies.DefaultSla());
     }
 
-    public async Task DisposeAsync()
-    {
-        await _db.DisposeAsync();
-        await _connection.DisposeAsync();
-    }
+    public async Task DisposeAsync() => await _database.DisposeAsync();
 
     [Fact]
     public async Task NoFilters_ReturnsEveryTicket()
@@ -160,6 +151,65 @@ public sealed class TicketQueriesTests : IAsyncLifetime
         Assert.Equal(14, result.TotalCount);
         Assert.Equal(3, result.TotalPages);
         Assert.Equal(4, result.Items.Count);
+    }
+
+    [Theory]
+    [InlineData(SlaStatus.WithinSla)]
+    [InlineData(SlaStatus.AtRisk)]
+    [InlineData(SlaStatus.Breached)]
+    [InlineData(SlaStatus.Met)]
+    [InlineData(SlaStatus.NotApplicable)]
+    public async Task SlaStatus_FilteredInSql_MatchesTheDomainRule_ForEveryTicket(SlaStatus status)
+    {
+        // Every ticket's status as the domain evaluates it (the list projection uses it)...
+        var all = await Search(new TicketQuery { PageSize = 100 });
+        var expected = all.Items.Where(t => t.SlaStatus == status).Select(t => t.Reference).Order();
+
+        // ...must be exactly what the SQL filter returns.
+        var filtered = await Search(new TicketQuery { SlaStatus = status, PageSize = 100 });
+
+        Assert.Equal(expected, References(filtered));
+        Assert.Equal(filtered.Items.Count, filtered.TotalCount);
+    }
+
+    [Fact]
+    public async Task SlaStatus_SeedCoversEveryMeasurableState()
+    {
+        var all = await Search(new TicketQuery { PageSize = 100 });
+
+        Assert.All(
+            new[] { SlaStatus.WithinSla, SlaStatus.AtRisk, SlaStatus.Breached, SlaStatus.Met },
+            status => Assert.Contains(all.Items, t => t.SlaStatus == status));
+    }
+
+    [Fact]
+    public async Task SlaStatus_CombinesWithOtherFilters()
+    {
+        var atRisk = await Search(new TicketQuery { SlaStatus = SlaStatus.AtRisk, PageSize = 100 });
+        var critical = atRisk.Items.Count(t => t.Priority == TicketPriority.Critical);
+
+        var result = await Search(new TicketQuery { SlaStatus = SlaStatus.AtRisk, Priority = TicketPriority.Critical });
+
+        Assert.Equal(critical, result.TotalCount);
+    }
+
+    [Fact]
+    public async Task Escalations_AreListedNewestFirst_WithAgentNames()
+    {
+        var ticket = await _db.Set<Ticket>().SingleAsync(t => t.Reference == "TCK-0002");
+        var sla = Policies.DefaultSla();
+        ticket.Escalate("First chase from customer", "Team Lead", sla, CustomerTier.Standard, 1, _clock.UtcNow);
+        _clock.Advance(TimeSpan.FromMinutes(10));
+        ticket.Escalate("Second chase, now urgent", "Duty Manager", sla, CustomerTier.Standard, 2, _clock.UtcNow);
+        await _db.SaveChangesAsync();
+
+        var history = await _queries.GetEscalationsAsync(ticket.Id, CancellationToken.None);
+
+        Assert.Equal(["Duty Manager", "Team Lead"], history.Select(e => e.EscalatedBy));
+        Assert.Equal(TicketPriority.High, history[0].FromPriority);
+        Assert.Equal(TicketPriority.Critical, history[0].ToPriority);
+        Assert.Equal("Alex Turner", history[0].FromAgent?.FullName);
+        Assert.Equal("Ben Osei", history[0].ToAgent?.FullName);
     }
 
     private Task<PagedResult<TicketListItemDto>> Search(TicketQuery query) =>
