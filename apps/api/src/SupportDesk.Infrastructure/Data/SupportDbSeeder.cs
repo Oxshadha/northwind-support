@@ -25,7 +25,8 @@ public sealed class SupportDbSeeder(
 {
     /// <summary>
     /// The password every seeded agent signs in with. A local fixture for development only:
-    /// it is published in the README, and the seeder only ever runs in Development.
+    /// it is published in the README, and the seeder only runs where
+    /// Database:MigrateAndSeedOnStartup is set (a developer machine or the local container).
     /// </summary>
     public const string DevelopmentPassword = "LocalDev-Only-2026!";
 

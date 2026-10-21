@@ -1,13 +1,13 @@
 /* =====================================================================
    Support Ticket Management System — reference schema
    ---------------------------------------------------------------------
-   This script is the source of truth for the STARTER schema and exists so
-   the database can be inspected or rebuilt without EF Core. The EF Core
-   migrations in src/Infrastructure/Migrations must produce an equivalent
-   schema.
+   This script is the STARTER schema, kept so the original database can be
+   inspected or rebuilt without EF Core; the InitialCreate migration in
+   apps/api/src/SupportDesk.Infrastructure/Data/Migrations is equivalent.
 
-   The TicketEscalations table is intentionally NOT here — creating it is
-   part of the assignment, via an EF Core migration.
+   It is not the current schema. Later migrations add Tickets.SlaWindowSeconds,
+   the TicketEscalations table and Agents.PasswordHash; the migrations are the
+   source of truth, applied with `npm run db:migrate` or on API start-up.
    ===================================================================== */
 
 IF DB_ID('SupportDesk') IS NULL

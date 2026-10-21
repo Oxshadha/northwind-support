@@ -8,8 +8,10 @@
    All timestamps are computed relative to SYSUTCDATETIME() at run time, so
    the SLA states (within / at risk / breached) stay meaningful whenever the
    script is run. The EF Core development seeder in
-   src/Infrastructure/Persistence/SupportDbSeeder.cs inserts exactly this
-   data using the same relative offsets.
+   apps/api/src/SupportDesk.Infrastructure/Data/SupportDbSeeder.cs inserts
+   this data using the same relative offsets, and also sets each ticket's
+   SlaWindowSeconds and each agent's development password hash, which this
+   starter script predates.
 
    Idempotent: it deletes and re-inserts everything.
    ===================================================================== */
