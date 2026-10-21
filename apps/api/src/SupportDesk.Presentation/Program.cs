@@ -5,6 +5,7 @@ using SupportDesk.Infrastructure;
 using SupportDesk.Presentation.Auth;
 using SupportDesk.Presentation.Extensions;
 using SupportDesk.Presentation.Filters;
+using SupportDesk.Presentation.Health;
 using SupportDesk.Presentation.Middleware;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -46,6 +47,7 @@ builder.Services.AddSwaggerGen(options =>
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddAgentAuthentication();
+builder.Services.AddApiHealthChecks();
 
 var app = builder.Build();
 
@@ -71,6 +73,9 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+
+// The one other endpoint open without a token, opted out here, next to the rest of the routing.
+app.MapApiHealthChecks();
 
 app.Run();
 

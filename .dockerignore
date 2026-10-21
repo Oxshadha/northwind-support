@@ -1,0 +1,29 @@
+# Only what the API image needs is sent to the Docker build: smaller context, faster builds,
+# and nothing secret or machine-specific can be copied in by accident.
+
+# Build output and dependencies, rebuilt inside the image
+**/bin/
+**/obj/
+**/node_modules/
+**/TestResults/
+
+# Version control, editor and OS files
+.git/
+.github/
+.vscode/
+.vs/
+**/.DS_Store
+
+# Secrets and local settings
+.env
+**/.env
+**/.env.*
+!**/.env.example
+
+# Not part of the API image: the web app, the tests, docs and SQL scripts
+apps/web/
+apps/api/tests/
+db/
+spec/
+*.md
+*.pdf

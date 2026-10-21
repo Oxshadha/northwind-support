@@ -23,5 +23,27 @@ services:
       retries: 12
       start_period: 20s
 
+  # The API, built from apps/api/Dockerfile. Everything environment-specific is passed in here
+  # at run time - nothing is baked into the image. The defaults are local fixtures, like the
+  # SA password above; set real values in .env (see .env.example).
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: supportdesk-api
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    ports:
+      - "5080:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: "${API_ENVIRONMENT:-Development}"
+      # Reaches SQL Server by its service name on the compose network.
+      ConnectionStrings__Default: "Server=sqlserver,1433;Database=SupportDesk;User Id=sa;Password=${MSSQL_SA_PASSWORD:-Local_Dev_Password1};TrustServerCertificate=True;Encrypt=False"
+      # A "dev-only-" key is refused outside Development, so this default cannot reach production.
+      Jwt__SigningKey: "${JWT_SIGNING_KEY:-dev-only-compose-signing-key-for-local-containers-only}"
+      # On an empty volume: apply the migrations and seed the demo data and dev credentials.
+      Database__MigrateAndSeedOnStartup: "${API_MIGRATE_AND_SEED:-true}"
+
 volumes:
   supportdesk-sql:

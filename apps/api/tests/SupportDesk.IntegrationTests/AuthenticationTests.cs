@@ -55,7 +55,7 @@ public sealed class AuthenticationTests(ApiFactory factory) : IClassFixture<ApiF
     }
 
     [Fact]
-    public async Task EveryEndpoint_RequiresSignIn_ExceptSignInItself()
+    public async Task EveryEndpoint_RequiresSignIn_ExceptSignInAndHealth()
     {
         // Enforced centrally: walk every routed endpoint the app exposes and call it anonymously.
         var endpoints = factory.Services.GetRequiredService<EndpointDataSource>().Endpoints.OfType<RouteEndpoint>().ToList();
@@ -63,15 +63,16 @@ public sealed class AuthenticationTests(ApiFactory factory) : IClassFixture<ApiF
 
         foreach (var endpoint in endpoints)
         {
-            var url = "/" + endpoint.RoutePattern.RawText!.Replace("{id:int}", "1", StringComparison.Ordinal);
-            var method = endpoint.Metadata.GetMetadata<HttpMethodMetadata>()!.HttpMethods.Single();
+            var url = "/" + endpoint.RoutePattern.RawText!.TrimStart('/').Replace("{id:int}", "1", StringComparison.Ordinal);
+            // Endpoints mapped for any method (the health check) carry no method metadata.
+            var method = endpoint.Metadata.GetMetadata<HttpMethodMetadata>()?.HttpMethods.Single() ?? "GET";
             var anonymousAllowed = endpoint.Metadata.GetMetadata<IAllowAnonymous>() is not null;
 
             var response = await Send(new HttpMethod(method), url, body: method is "GET" ? null : new { });
 
             if (anonymousAllowed)
             {
-                Assert.Equal("/api/auth/login", url);
+                Assert.Contains(url, new[] { "/api/auth/login", "/health" });
             }
             else
             {
@@ -124,6 +125,17 @@ public sealed class AuthenticationTests(ApiFactory factory) : IClassFixture<ApiF
         var response = await Send(HttpMethod.Get, "/api/auth/me", forged);
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Health_IsOpen_AndReportsTheDatabase()
+    {
+        var response = await _client.GetAsync("/health");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("Healthy", body.RootElement.GetProperty("status").GetString());
+        Assert.Equal("Healthy", body.RootElement.GetProperty("checks").GetProperty("database").GetString());
     }
 
     [Fact]
